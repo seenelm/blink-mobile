@@ -8,10 +8,7 @@ import SwiftUI
 
 struct ForgotPasswordView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var authManager: AuthManager
-    @State private var email = ""
-    @State private var showingAlert = false
-    @State private var alertMessage = ""
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var isSuccess = false
     
     var body: some View {
@@ -36,7 +33,7 @@ struct ForgotPasswordView: View {
                 .padding(.top, 50)
                 
                 // Email field
-                TextField("Email", text: $email)
+                TextField("Email", text: $authViewModel.email)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -45,7 +42,7 @@ struct ForgotPasswordView: View {
                 // Submit button
                 Button(action: resetPassword) {
                     HStack {
-                        if authManager.isLoading {
+                        if authViewModel.isLoading {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(0.8)
@@ -60,7 +57,7 @@ struct ForgotPasswordView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
-                .disabled(authManager.isLoading || email.isEmpty)
+                .disabled(authViewModel.isLoading || authViewModel.email.isEmpty)
                 .padding(.horizontal, 30)
                 
                 Spacer()
@@ -74,14 +71,14 @@ struct ForgotPasswordView: View {
                     }
                 }
             }
-            .alert(isSuccess ? "Success" : "Error", isPresented: $showingAlert) {
+            .alert(isSuccess ? "Success" : "Error", isPresented: $authViewModel.showingAlert) {
                 Button("OK") {
                     if isSuccess {
                         dismiss()
                     }
                 }
             } message: {
-                Text(alertMessage)
+                Text(authViewModel.alertMessage)
             }
         }
     }
@@ -89,24 +86,20 @@ struct ForgotPasswordView: View {
     private func resetPassword() {
         Task {
             do {
-                try await authManager.resetPassword(email: email)
+                try await authViewModel.resetPassword()
                 await MainActor.run {
                     isSuccess = true
-                    alertMessage = "Password reset link sent to your email!"
-                    showingAlert = true
                 }
             } catch {
                 await MainActor.run {
                     isSuccess = false
-                    alertMessage = error.localizedDescription
-                    showingAlert = true
                 }
             }
         }
     }
 }
 
-#Preview {
-    ForgotPasswordView()
-        .environmentObject(AuthManager())
-} 
+// #Preview {
+//     let authViewModel = AuthViewModel(authService: MockAuthService.shared)
+//     return ForgotPasswordView().environmentObject(authViewModel)
+// } 

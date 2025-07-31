@@ -7,9 +7,7 @@
 import SwiftUI
 
 struct EmailVerificationView: View {
-    @EnvironmentObject var authManager: AuthManager
-    @State private var showingAlert = false
-    @State private var alertMessage = ""
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var otpCode = ["", "", "", "", "", ""]
     @State private var currentFocus = 0
     
@@ -22,7 +20,7 @@ struct EmailVerificationView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
                 
-                Text("A 6-digit code was sent to \(authManager.currentUser?.email ?? "")")
+                Text("A 6-digit code was sent to \(authViewModel.email)")
                     .font(.body)
                     .foregroundColor(.secondary)
             }
@@ -49,7 +47,7 @@ struct EmailVerificationView: View {
                 
                 // Resend Code Button
                 Button("Resend code") {
-                    resendOTP()
+                    authViewModel.resendOTP()
                 }
                 .font(.body)
                 .foregroundColor(.blue)
@@ -60,7 +58,10 @@ struct EmailVerificationView: View {
             
             // Continue Button
             VStack(spacing: 16) {
-                Button(action: verifyOTP) {
+                Button(action: {
+                    let code = otpCode.joined()
+                    authViewModel.verifyOTP(code: code)
+                }) {
                     Text("Continue")
                         .font(.headline)
                         .fontWeight(.semibold)
@@ -75,10 +76,10 @@ struct EmailVerificationView: View {
                 .padding(.bottom, 50)
             }
         }
-        .alert("Error", isPresented: $showingAlert) {
+        .alert("Error", isPresented: $authViewModel.showingAlert) {
             Button("OK") { }
         } message: {
-            Text(alertMessage)
+            Text(authViewModel.alertMessage)
         }
         .onAppear {
             // Auto-focus the first field
@@ -88,37 +89,6 @@ struct EmailVerificationView: View {
     
     private var isOTPComplete: Bool {
         return otpCode.allSatisfy { !$0.isEmpty }
-    }
-    
-    private func verifyOTP() {
-        let code = otpCode.joined()
-        Task {
-            do {
-                try await authManager.verifyOTP(code: code)
-            } catch {
-                await MainActor.run {
-                    alertMessage = error.localizedDescription
-                    showingAlert = true
-                }
-            }
-        }
-    }
-    
-    private func resendOTP() {
-        Task {
-            do {
-                try await authManager.resendOTP()
-                await MainActor.run {
-                    alertMessage = "New code sent successfully!"
-                    showingAlert = true
-                }
-            } catch {
-                await MainActor.run {
-                    alertMessage = error.localizedDescription
-                    showingAlert = true
-                }
-            }
-        }
     }
 }
 
@@ -155,7 +125,7 @@ struct OTPTextField: View {
     }
 }
 
-#Preview {
-    EmailVerificationView()
-        .environmentObject(AuthManager())
-} 
+// #Preview {
+//     let authViewModel = AuthViewModel(authService: MockAuthService.shared)
+//     return EmailVerificationView().environmentObject(authViewModel)
+// } 

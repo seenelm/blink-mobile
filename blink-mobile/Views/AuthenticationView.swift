@@ -7,23 +7,12 @@
 import SwiftUI
 
 struct AuthenticationView: View {
-    @State private var authMode: AuthMode = .signIn
-    @State private var email = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    @State private var name = ""
-    @State private var showingAlert = false
-    @State private var alertMessage = ""
-    @State private var showingForgotPassword = false
-    @State private var agreedToTerms = false
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
     @State private var showPassword = false
     @State private var showConfirmPassword = false
-    
-    @EnvironmentObject var authManager: AuthManager
-    
-    enum AuthMode {
-        case signIn, signUp
-    }
+    @State private var showingForgotPassword = false
+    @State private var agreedToTerms = false
     
     var body: some View {
         NavigationView {
@@ -31,12 +20,12 @@ struct AuthenticationView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Header
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(authMode == .signUp ? "Sign up" : "Sign in")
+                        Text(authViewModel.authMode == .signUp ? "Sign up" : "Sign in")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                         
-                        Text(authMode == .signUp ? "Create an account to get started" : "Welcome back")
+                        Text(authViewModel.authMode == .signUp ? "Create an account to get started" : "Welcome back")
                             .font(.body)
                             .foregroundColor(.secondary)
                     }
@@ -45,7 +34,7 @@ struct AuthenticationView: View {
                     
                     // Form
                     VStack(spacing: 24) {
-                        if authMode == .signUp {
+                        if authViewModel.authMode == .signUp {
                             // Name Field
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Name")
@@ -53,7 +42,7 @@ struct AuthenticationView: View {
                                     .fontWeight(.semibold)
                                     .foregroundColor(.primary)
                                 
-                                TextField("", text: $name)
+                                TextField("", text: $authViewModel.name)
                                     .textFieldStyle(CustomTextFieldStyle())
                                     .autocapitalization(.words)
                             }
@@ -66,7 +55,7 @@ struct AuthenticationView: View {
                                 .fontWeight(.semibold)
                                 .foregroundColor(.primary)
                             
-                            TextField("name@email.com", text: $email)
+                            TextField("name@email.com", text: $authViewModel.email)
                                 .textFieldStyle(CustomTextFieldStyle())
                                 .keyboardType(.emailAddress)
                                 .autocapitalization(.none)
@@ -81,10 +70,10 @@ struct AuthenticationView: View {
                             
                             HStack {
                                 if showPassword {
-                                    TextField("Create a password", text: $password)
+                                    TextField("Create a password", text: $authViewModel.password)
                                         .textFieldStyle(CustomTextFieldStyle())
                                 } else {
-                                    SecureField("Create a password", text: $password)
+                                    SecureField("Create a password", text: $authViewModel.password)
                                         .textFieldStyle(CustomTextFieldStyle())
                                 }
                                 
@@ -97,7 +86,7 @@ struct AuthenticationView: View {
                         }
                         
                         // Confirm Password Field (only for sign up)
-                        if authMode == .signUp {
+                        if authViewModel.authMode == .signUp {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Confirm Password")
                                     .font(.headline)
@@ -106,10 +95,10 @@ struct AuthenticationView: View {
                                 
                                 HStack {
                                     if showConfirmPassword {
-                                        TextField("Confirm password", text: $confirmPassword)
+                                        TextField("Confirm your password", text: $authViewModel.confirmPassword)
                                             .textFieldStyle(CustomTextFieldStyle())
                                     } else {
-                                        SecureField("Confirm password", text: $confirmPassword)
+                                        SecureField("Confirm your password", text: $authViewModel.confirmPassword)
                                             .textFieldStyle(CustomTextFieldStyle())
                                     }
                                     
@@ -122,58 +111,41 @@ struct AuthenticationView: View {
                             }
                         }
                         
-                        // Terms and Conditions (only for sign up)
-                        if authMode == .signUp {
-                            HStack(alignment: .top, spacing: 12) {
-                                Button(action: { agreedToTerms.toggle() }) {
-                                    Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
-                                        .foregroundColor(agreedToTerms ? .blue : .secondary)
-                                        .font(.title2)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack(spacing: 0) {
-                                        Text("I've read and agree with the ")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Button("Terms and Conditions") {
-                                            // Handle terms link
-                                        }
-                                        .font(.body)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.blue)
-                                        
-                                        Text(" and the ")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Button("Privacy Policy.") {
-                                            // Handle privacy link
-                                        }
-                                        .font(.body)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.blue)
-                                    }
-                                }
+                        // Terms & Conditions (only for sign up)
+                        if authViewModel.authMode == .signUp {
+                            Toggle(isOn: $agreedToTerms) {
+                                Text("I agree to the Terms & Conditions")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
                             }
-                            .padding(.top, 8)
+                            .toggleStyle(CheckboxToggleStyle())
                         }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 32)
-                    
-                    // Action Button
-                    VStack(spacing: 16) {
-                        Button(action: performAction) {
+                        
+                        // Forgot Password (only for sign in)
+                        if authViewModel.authMode == .signIn {
+                            Button(action: {
+                                showingForgotPassword = true
+                            }) {
+                                Text("Forgot Password?")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.blue)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        
+                        // Action Button
+                        Button(action: {
+                            authViewModel.performAction()
+                        }) {
                             HStack {
-                                if authManager.isLoading {
+                                if authViewModel.isLoading {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 }
                                 
-                                Text(authMode == .signUp ? "Sign Up" : "Sign In")
+                                Text(authViewModel.authMode == .signUp ? "Sign Up" : "Sign In")
                                     .font(.headline)
                                     .fontWeight(.semibold)
                             }
@@ -183,83 +155,70 @@ struct AuthenticationView: View {
                             .foregroundColor(.white)
                             .cornerRadius(12)
                         }
-                        .disabled(authManager.isLoading || !isFormValid)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 32)
+                        .disabled(authViewModel.isLoading || !isFormValid)
                         
-                        // Forgot Password (only for sign in)
-                        if authMode == .signIn {
-                            Button("Forgot Password?") {
-                                showingForgotPassword = true
-                            }
-                            .font(.body)
-                            .foregroundColor(.blue)
-                        }
-                        
-                        // Toggle Sign In/Sign Up
+                        // Toggle Auth Mode
                         HStack {
-                            Text(authMode == .signUp ? "Already have an account? " : "Don't have an account? ")
-                                .font(.body)
+                            Text(authViewModel.authMode == .signUp ? "Already have an account?" : "Don't have an account?")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
                             
-                            Button(authMode == .signUp ? "Sign In" : "Sign Up") {
-                                authMode = authMode == .signIn ? .signUp : .signIn
-                                // Reset form when switching modes
-                                email = ""
-                                password = ""
-                                confirmPassword = ""
-                                name = ""
-                                agreedToTerms = false
+                            Button(action: {
+                                authViewModel.toggleAuthMode()
+                            }) {
+                                Text(authViewModel.authMode == .signUp ? "Sign In" : "Sign Up")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.blue)
                             }
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.blue)
                         }
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 8)
                     }
-                    
-                    Spacer(minLength: 50)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 32)
+                    .padding(.bottom, 40)
                 }
             }
-            .alert("Error", isPresented: $showingAlert) {
-                Button("OK") { }
-            } message: {
-                Text(alertMessage)
-            }
+            .navigationBarHidden(true)
             .sheet(isPresented: $showingForgotPassword) {
                 ForgotPasswordView()
             }
-        }
-    }
-    
-    private var isFormValid: Bool {
-        if authMode == .signUp {
-            return !email.isEmpty && !password.isEmpty && !name.isEmpty &&
-                   password == confirmPassword && password.count >= 6 && agreedToTerms
-        } else {
-            return !email.isEmpty && !password.isEmpty
-        }
-    }
-    
-    private func performAction() {
-        Task {
-            do {
-                if authMode == .signUp {
-                    try await authManager.signUp(email: email, password: password, name: name)
-                } else {
-                    try await authManager.signIn(email: email, password: password)
-                }
-            } catch {
-                await MainActor.run {
-                    alertMessage = error.localizedDescription
-                    showingAlert = true
-                }
+            .alert("Error", isPresented: $authViewModel.showingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(authViewModel.alertMessage)
             }
+        }
+    }
+    
+    // Computed property to validate form
+    private var isFormValid: Bool {
+        if authViewModel.authMode == .signUp {
+            return !authViewModel.email.isEmpty && !authViewModel.password.isEmpty && !authViewModel.name.isEmpty &&
+                   authViewModel.password == authViewModel.confirmPassword && authViewModel.password.count >= 6 && agreedToTerms
+        } else {
+            return !authViewModel.email.isEmpty && !authViewModel.password.isEmpty
         }
     }
 }
 
-#Preview {
-    AuthenticationView()
-        .environmentObject(AuthManager())
-} 
+// Checkbox Toggle Style
+struct CheckboxToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                .foregroundColor(configuration.isOn ? .blue : .secondary)
+                .font(.system(size: 20))
+                .onTapGesture {
+                    configuration.isOn.toggle()
+                }
+            
+            configuration.label
+        }
+    }
+}
+
+//#Preview {
+//    AuthenticationView(viewModel: AuthViewModel(authService: MockAuthService.shared))
+//} 

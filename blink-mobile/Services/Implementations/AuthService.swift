@@ -1,36 +1,47 @@
 //
-//  AuthManager.swift
+//  AuthService.swift
 //  blink-mobile
 //
 //  Created by Noah Gross on 7/22/25.
 //
-import SwiftUI
+import Foundation
 import Supabase
+import Combine
 
-// MARK: - Auth Manager
-class AuthManager: ObservableObject {
-    @Published var isAuthenticated = false
+class AuthService: ObservableObject, AuthServiceProtocol {
+    // MARK: - Published Properties
     @Published var currentUser: User?
-    @Published var isLoading = false
     @Published var authState: AuthState = .loading
+    @Published var isLoading = false
     @Published var emailVerificationSent = false
     
+    // MARK: - Private Properties
     private var supabase: SupabaseClient {
         SupabaseConfig.client
     }
     
-    enum AuthState {
-        case loading
-        case unauthenticated
-        case authenticated
-        case emailVerificationRequired
+    private let appState: AppState
+    
+    // MARK: - Initialization
+    init(appState: AppState) {
+        self.appState = appState
+        print("📱 AuthService: Initialized with AppState")
     }
     
+    // MARK: - Public Methods
     func initialize() {
-        print("Loading...")
+        print("Loading authentication service...")
         Task {
             await checkCurrentSession()
         }
+    }
+    
+    // For debugging purposes only
+    @MainActor
+    func forceAuthState(_ state: AuthState) {
+        self.authState = state
+        self.appState.authState = state
+        self.isLoading = false
     }
     
     @MainActor
@@ -38,6 +49,8 @@ class AuthManager: ObservableObject {
         print("🔍 Starting session check...")
         isLoading = true
         authState = .loading
+        appState.authState = .loading
+        print("🔄 Setting initial auth state to loading")
         
         do {
             print("🔍 Attempting to get Supabase session...")
@@ -48,24 +61,32 @@ class AuthManager: ObservableObject {
                 email: user.email ?? "",
                 name: user.userMetadata["name"]?.stringValue ?? ""
             )
+            print("✅ Session found for user: \(user.email ?? "unknown")")
             
             // Check if email is verified
             if user.emailConfirmedAt != nil {
-                self.isAuthenticated = true
+                print("✅ User email is verified, setting state to authenticated")
                 self.authState = .authenticated
+                self.appState.authState = .authenticated
             } else {
+                print("⚠️ User email is not verified, setting state to emailVerificationRequired")
                 self.authState = .emailVerificationRequired
+                self.appState.authState = .emailVerificationRequired
             }
         } catch {
-            print("No existing session found: \(error)")
+            print("❌ No existing session found: \(error)")
+            print("🔄 Setting auth state to unauthenticated")
             self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
         }
         
         isLoading = false
+        print("🔄 Current auth state: \(authState)")
+        print("📱 isLoading set to: \(isLoading)")
     }
     
     @MainActor
-    func signIn(email: String, password: String) async throws {
+    func signIn(email: String, password: String) async throws -> User {
         isLoading = true
         
         do {
@@ -75,27 +96,34 @@ class AuthManager: ObservableObject {
             )
             
             let user = authResponse.user
-            self.currentUser = User(
+            let newUser = User(
                 id: user.id.uuidString,
                 email: user.email ?? "",
                 name: user.userMetadata["name"]?.stringValue ?? ""
             )
             
+            self.currentUser = newUser
+            
             if user.emailConfirmedAt != nil {
-                self.isAuthenticated = true
                 self.authState = .authenticated
+                self.appState.authState = .authenticated
             } else {
                 self.authState = .emailVerificationRequired
+                self.appState.authState = .emailVerificationRequired
             }
+            
+            isLoading = false
+            return newUser
         } catch {
+            isLoading = false
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
             throw error
         }
-        
-        isLoading = false
     }
     
     @MainActor
-    func signUp(email: String, password: String, name: String) async throws {
+    func signUp(email: String, password: String, name: String) async throws -> User {
         isLoading = true
         
         do {
@@ -106,23 +134,30 @@ class AuthManager: ObservableObject {
             )
             
             let user = authResponse.user
-            self.currentUser = User(
+            let newUser = User(
                 id: user.id.uuidString,
                 email: user.email ?? "",
                 name: name
             )
             
+            self.currentUser = newUser
+            
             // Always require email verification for OTP
             self.authState = .emailVerificationRequired
+            self.appState.authState = .emailVerificationRequired
             self.emailVerificationSent = true
             
             // Send OTP email
             try await sendOTPEmail()
+            
+            isLoading = false
+            return newUser
         } catch {
+            isLoading = false
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
             throw error
         }
-        
-        isLoading = false
     }
     
     @MainActor
@@ -144,9 +179,11 @@ class AuthManager: ObservableObject {
                 email: user.email ?? "",
                 name: user.userMetadata["name"]?.stringValue ?? ""
             )
-            self.isAuthenticated = true
             self.authState = .authenticated
+            self.appState.authState = .authenticated
         } catch {
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
             throw error
         }
         
@@ -161,6 +198,8 @@ class AuthManager: ObservableObject {
             // Resend OTP email
             try await sendOTPEmail()
         } catch {
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
             throw error
         }
         
@@ -185,7 +224,10 @@ class AuthManager: ObservableObject {
                 type: .signup
             )
             self.emailVerificationSent = true
+            self.appState.authState = .emailVerificationRequired
         } catch {
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
             throw error
         }
         
@@ -196,11 +238,13 @@ class AuthManager: ObservableObject {
     func signOut() async {
         do {
             try await supabase.auth.signOut()
-            self.isAuthenticated = false
             self.currentUser = nil
             self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
         } catch {
             print("Error signing out: \(error)")
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
         }
     }
     
@@ -211,6 +255,8 @@ class AuthManager: ObservableObject {
         do {
             try await supabase.auth.resetPasswordForEmail(email)
         } catch {
+            self.authState = .unauthenticated
+            self.appState.authState = .unauthenticated
             throw error
         }
         

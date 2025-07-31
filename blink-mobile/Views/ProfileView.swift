@@ -7,14 +7,14 @@
 import SwiftUI
 
 struct ProfileView: View {
-    @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var profileViewModel: ProfileViewModel
     @State private var showingSignOutAlert = false
     
     var body: some View {
         NavigationView {
             List {
                 Section {
-                    if let user = authManager.currentUser {
+                    if let user = profileViewModel.currentUser {
                         HStack {
                             Image(systemName: "person.circle.fill")
                                 .font(.system(size: 50))
@@ -43,9 +43,7 @@ struct ProfileView: View {
             .alert("Sign Out", isPresented: $showingSignOutAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Sign Out", role: .destructive) {
-                    Task {
-                        await authManager.signOut()
-                    }
+                    profileViewModel.signOut()
                 }
             } message: {
                 Text("Are you sure you want to sign out?")
@@ -54,7 +52,7 @@ struct ProfileView: View {
     }
 }
 
-#Preview {
-    ProfileView()
-        .environmentObject(AuthManager())
-} 
+// #Preview {
+//     let profileViewModel = ProfileViewModel(authService: MockAuthService.shared)
+//     return ProfileView().environmentObject(profileViewModel)
+// } 
